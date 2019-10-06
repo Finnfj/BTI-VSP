@@ -1,34 +1,38 @@
 package chat;
 
-import java.awt.BorderLayout;
 import java.awt.EventQueue;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.border.EmptyBorder;
 import java.awt.GridLayout;
 import javax.swing.border.LineBorder;
-import javax.swing.text.AbstractDocument;
-import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DocumentFilter;
+
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 
 import java.awt.Color;
+import java.awt.Dialog;
+
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+
 import java.awt.Font;
 import javax.swing.JTextField;
-import javax.swing.SwingConstants;
-import javax.swing.BoxLayout;
-import javax.swing.JTextPane;
 import java.awt.GridBagLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
-import java.awt.FlowLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JTextArea;
 import java.awt.event.ActionListener;
 import java.rmi.RemoteException;
+import java.sql.Timestamp;
 import java.awt.event.ActionEvent;
 
 public class MainFrame extends JFrame {
@@ -42,8 +46,7 @@ public class MainFrame extends JFrame {
 	
 	private Client client;
 	private Server server;
-	private String chatLog;
-	private String servLog;
+	private StringProperty chatLog = new SimpleStringProperty();
 
 	/**
 	 * Launch the application.
@@ -144,33 +147,72 @@ public class MainFrame extends JFrame {
 		gbc_panel_3.gridx = 1;
 		gbc_panel_3.gridy = 2;
 		panel.add(panel_3, gbc_panel_3);
-		
+
+		JButton btnTrennen = new JButton("Trennen");
 		JButton btnVerbinden = new JButton("Verbinden");
 		btnVerbinden.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				String address = textField.getText();
-				int timeout = Integer.parseInt(textField_1.getText());
-				client = new Client(address, timeout);
+				String timeoutString = textField_1.getText();
+				
+				// check if necessary information is existent
+				if (address.equals("") || timeoutString.equals("")) {
+					JOptionPane.showMessageDialog(null, "Bitte geben Sie Adresse/Timeout an!");
+			        return;
+				}
+				
+				int timeout;
+				// check if timeout is really a number
+				try {
+					timeout = Integer.parseInt(timeoutString);
+				} catch (NumberFormatException e) {
+					JOptionPane.showMessageDialog(null, "Bitte geben Sie einen Timeout in Sekunden an!");
+					return;
+				}
+				
+				try {
+					client = new Client(address, timeout);
+				} catch (RemoteException e) {
+					JOptionPane.showMessageDialog(null, "Konnte nicht mit angegebener Adresse verbinden.");
+					return;
+				}
+				chatLog.set("");
+				
+				//Button logic
+				btnVerbinden.setEnabled(false);
+				btnTrennen.setEnabled(true);
 			}
 		});
 		panel_3.add(btnVerbinden);
 		
-		JButton btnTrennen = new JButton("Trennen");
+		btnTrennen.setEnabled(false);
 		btnTrennen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				client = null;
+				
+				//Button logic
+				btnTrennen.setEnabled(false);
+				btnVerbinden.setEnabled(true);
 			}
 		});
 		panel_3.add(btnTrennen);
 		
 		JTextArea textPane = new JTextArea();
+		JScrollPane scrollpane = new JScrollPane(textPane);
+		chatLog.addListener((new ChangeListener<String>() {
+			@Override
+			public void changed(ObservableValue<? extends String> arg0,
+					String arg1, String arg2) {
+				textPane.setText(arg2);
+			}
+        }));
 		textPane.setEditable(false);
 		GridBagConstraints gbc_textPane = new GridBagConstraints();
 		gbc_textPane.insets = new Insets(5, 5, 5, 5);
 		gbc_textPane.fill = GridBagConstraints.BOTH;
 		gbc_textPane.gridx = 0;
 		gbc_textPane.gridy = 2;
-		panel_2.add(textPane, gbc_textPane);
+		panel_2.add(scrollpane, gbc_textPane);
 		
 		JPanel panel_4 = new JPanel();
 		GridBagConstraints gbc_panel_4 = new GridBagConstraints();
@@ -189,7 +231,7 @@ public class MainFrame extends JFrame {
 			public void actionPerformed(ActionEvent e) {
 				try {
 					client.sendMessage(textField_2.getText());
-				} catch (RemoteException e1) {
+				} catch (RemoteException | InterruptedException e1) {
 					e1.printStackTrace();
 				}
 			}
@@ -202,20 +244,28 @@ public class MainFrame extends JFrame {
 		gbc_panel_5.gridx = 0;
 		gbc_panel_5.gridy = 4;
 		panel_2.add(panel_5, gbc_panel_5);
-		
+
+		JCheckBox chckbxAlleNeuenNachrichten = new JCheckBox("Alle neuen Nachrichten abrufen");
 		JButton btnNachrichtenAbrufen = new JButton("Nachrichten abrufen");
 		btnNachrichtenAbrufen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				try {
-					client.getMessage();
-				} catch (RemoteException e1) {
+					String message = client.getMessage();
+					if (chckbxAlleNeuenNachrichten.isSelected()) {
+						while (!message.equals("")) {
+							chatLog.set(chatLog.getValueSafe() + message);
+							message = client.getMessage();
+						}
+					} else {
+						chatLog.set(chatLog.getValueSafe() + message);
+					}
+				} catch (RemoteException | InterruptedException e1) {
 					e1.printStackTrace();
 				}
 			}
 		});
 		panel_5.add(btnNachrichtenAbrufen);
 		
-		JCheckBox chckbxAlleNeuenNachrichten = new JCheckBox("Alle neuen Nachrichten abrufen");
 		panel_5.add(chckbxAlleNeuenNachrichten);
 		
 		JPanel panel_1 = new JPanel();
@@ -290,7 +340,18 @@ public class MainFrame extends JFrame {
 		gbc_panel_7.gridx = 1;
 		gbc_panel_7.gridy = 2;
 		panel_6.add(panel_7, gbc_panel_7);
-		
+
+		JTextArea textPane_1 = new JTextArea();
+		JScrollPane scrollpane_1 = new JScrollPane(textPane_1);
+		textPane_1.setEditable(false);
+		GridBagConstraints gbc_textPane_1 = new GridBagConstraints();
+		gbc_textPane_1.insets = new Insets(5, 5, 5, 5);
+		gbc_textPane_1.fill = GridBagConstraints.BOTH;
+		gbc_textPane_1.gridx = 0;
+		gbc_textPane_1.gridy = 2;
+		panel_1.add(scrollpane_1, gbc_textPane_1);
+
+		JButton btnStoppen = new JButton("Stoppen");
 		JButton btnStarten = new JButton("Starten");
 		btnStarten.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -298,28 +359,38 @@ public class MainFrame extends JFrame {
 				int histTime = Integer.parseInt(textField_4.getText());
 				try {
 					server = new Server(bufferS, histTime);
+					server.getLogMsg().addListener((new ChangeListener<String>() {
+						@Override
+						public void changed(ObservableValue<? extends String> arg0,
+								String arg1, String arg2) {
+							textPane_1.append(new Timestamp(System.currentTimeMillis()) + "\n" + arg2 + "\n");
+						}
+			        }));
+					// get first logMsg, which is initialization
+					textPane_1.setText(new Timestamp(System.currentTimeMillis()) + "\n" + server.getLogMsg().get() + "\n");
+					
+					// Button logic
+					btnStarten.setEnabled(false);
+					btnStoppen.setEnabled(true);
 				} catch (RemoteException e1) {
 					e1.printStackTrace();
 				}
 			}
 		});
 		panel_7.add(btnStarten);
-		
-		JButton btnStoppen = new JButton("Stoppen");
+
+		btnStoppen.setEnabled(false);
 		btnStoppen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				server = null;
+				
+				// Button logic
+				btnStoppen.setEnabled(false);
+				btnStarten.setEnabled(true);
 			}
 		});
 		panel_7.add(btnStoppen);
 		
-		JTextArea textPane_1 = new JTextArea();
-		textPane_1.setEditable(false);
-		GridBagConstraints gbc_textPane_1 = new GridBagConstraints();
-		gbc_textPane_1.insets = new Insets(5, 5, 5, 5);
-		gbc_textPane_1.fill = GridBagConstraints.BOTH;
-		gbc_textPane_1.gridx = 0;
-		gbc_textPane_1.gridy = 2;
-		panel_1.add(textPane_1, gbc_textPane_1);
+
 	}
 }

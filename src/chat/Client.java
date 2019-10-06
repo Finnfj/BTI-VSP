@@ -11,32 +11,52 @@ public class Client {
 	private RemoteInterface server;
 	private String clientID;
 	private int timeout;
-	private String chatlog;
 	
-	public Client(String serverAddress, int timeout) {
+	public Client(String serverAddress, int timeout) throws RemoteException {
 		try {
 			this.clientID = System.getProperty("user.name") + "@" + InetAddress.getLocalHost().getHostName();
 			Registry registry = LocateRegistry.getRegistry(serverAddress);
 			server = (RemoteInterface) registry.lookup(INTERFACENAME);
 		} catch (UnknownHostException e) {
 			System.out.println("Konnte eigene IP-Adresse nicht ermitteln");
-			e.printStackTrace();
-		} catch (RemoteException e) {
-			System.out.println("Fehler bei Kommunikation mit RMI-Server");
-			e.printStackTrace();			
+			e.printStackTrace();		
 		} catch (NotBoundException e) {
 			System.out.println("Remote Objekt konnte in der Registry nicht gefunden werden");
 			e.printStackTrace();			
 		}
 		this.timeout = timeout;
-		this.chatlog = "";
 	}
 
-	public void getMessage() throws RemoteException {
-		System.out.println("CLIENT: " + server.nextMessage(clientID));
+	public String getMessage() throws RemoteException, InterruptedException {
+		try {
+			return server.nextMessage(clientID);
+		} catch (RemoteException e) {
+			// Try on for timeout seconds
+			long timeoutStart = System.currentTimeMillis();
+			while (System.currentTimeMillis() < (timeoutStart + timeout*1000)) {
+				Thread.sleep(1000);
+				try {
+					return server.nextMessage(clientID);
+				} catch (RemoteException e2) {	}
+			}
+			e.printStackTrace();
+			return null;
+		}
 	}
 	
-	public void sendMessage(String message) throws RemoteException {
-		server.newMessage(clientID, message);
+	public void sendMessage(String message) throws RemoteException, InterruptedException {
+		try {
+			server.newMessage(clientID, message);
+		} catch (RemoteException e) {
+			// Try on for timeout seconds
+			long timeoutStart = System.currentTimeMillis();
+			while (System.currentTimeMillis() < (timeoutStart + timeout*1000)) {
+				Thread.sleep(1000);
+				try {
+					server.newMessage(clientID, message);
+				} catch (RemoteException e2) {	}
+			}
+			e.printStackTrace();
+		}
 	}
 }

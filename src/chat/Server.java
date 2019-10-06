@@ -1,10 +1,11 @@
 package chat;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.rmi.*;
 import java.rmi.server.*;
 import java.rmi.registry.*;
-import java.rmi.RemoteException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,8 +13,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.FileHandler;
+import java.util.logging.Formatter;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
+import java.util.logging.StreamHandler;
+
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 
 public class Server extends UnicastRemoteObject implements RemoteInterface {
 	private static final String INTERFACENAME = "MessageService";
@@ -23,9 +29,15 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 	private List<Message> messageQueue;
 	private Map<String,ClientMemory> history;
 	
-	Logger logger = Logger.getLogger("ServerLog");  
-    FileHandler fh;  
-	
+	private Logger logger = Logger.getLogger("ServerLog");
+	private FileHandler fh;
+	private Registry registry;
+
+	// StringProperty for reading Server log externally
+	private StringProperty logMsg = new SimpleStringProperty();
+	public StringProperty getLogMsg() {
+		return logMsg;
+	}
 
 	public Server(int queueLen, int keepHistoryTime) throws RemoteException {
 		this.queueLen = queueLen;
@@ -37,12 +49,10 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 
 		// Log starten
 	    try {   
-	        fh = new FileHandler("./Server.log");  
+	    	fh = new FileHandler("./Server.log");  
 	        logger.addHandler(fh);
-	        SimpleFormatter formatter = new SimpleFormatter();  
-	        fh.setFormatter(formatter);  
- 
-	        logger.info("Server Log started");  
+	        SimpleFormatter formatter = new SimpleFormatter();
+	        fh.setFormatter(formatter);   
 	    } catch (SecurityException e) {  
 	        e.printStackTrace();  
 	    } catch (IOException e) {  
@@ -53,12 +63,14 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 		Thread cleaner = new CleanerThread();
 		cleaner.start();
 		try {
-			Registry registry = LocateRegistry.createRegistry(1099);
+			try {
+				registry = LocateRegistry.createRegistry(1099);
+			} catch (Exception e) {}
 			registry = LocateRegistry.getRegistry();
 			registry.rebind(INTERFACENAME, this);
-			logger.info("Server started with Messagebuffer=" + queueLen + " and Client caching of " + keepHistoryTime + "s");
+			log("Server started with Messagebuffer=" + queueLen + " and Client caching of " + keepHistoryTime + "s");
 		} catch (RemoteException e) {
-			logger.warning("Server could not be started");
+			log("Server could not be started");
 			e.printStackTrace();
 		}
 	}
@@ -67,11 +79,11 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 	public void newMessage(String clientID, String message) throws RemoteException {
 		if (messageQueue.size() >= queueLen) {
 			messageQueue.remove(0);
-			logger.info("receiving message while buffer is full, delete oldest message...");
+			log("receiving message while buffer is full, delete oldest message...");
 		}
 		Message m = new Message(clientID, messageCounter++, message, System.currentTimeMillis());
 		messageQueue.add(m);
-		logger.info("received following message: " + m.toString());
+		log("received following message: " + m.toString());
 	}
 
 	@Override
@@ -95,7 +107,7 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 						if (lastMessageIndex + 1 < messageQueue.size()) {
 							message = messageQueue.get(lastMessageIndex + 1);
 						} else {
-							logger.info(clientID + " reading message but nothing to deliver");
+							log(clientID + " reading message but nothing to deliver");
 							return "";
 						}
 					}
@@ -115,11 +127,11 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 
 		client.setLastSent(message);
 		if (message == null) {
-			logger.info(clientID + " reading message but nothing to deliver");
+			log(clientID + " reading message but nothing to deliver");
 			return "";
 		} else { 
-			logger.info(clientID + " reading message, delivering message: " + message.toString());
-			return message.toString();
+			log(clientID + " reading message, delivering message: " + message.toString());
+			return message.toString() + "\n";
 		}
 	}
 	
@@ -131,6 +143,11 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 			message = messageQueue.get(0);
 		}
 		return message;
+	}
+	
+	private void log(String s) {
+		logger.info(s);
+		logMsg.set(s);
 	}
 	
 	class CleanerThread extends Thread {
@@ -151,7 +168,7 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 			Collection<ClientMemory> hist = history.values();
 			for (ClientMemory c : hist) {
 				if (c.getDeathTime() <= currTime) {
-					logger.info("TTL of a client exceeded, removing from cache...");
+					log("TTL of a client exceeded, removing from cache...");
 					hist.remove(c);
 				}
 			}

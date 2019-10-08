@@ -13,11 +13,8 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
 
 import java.awt.Color;
-import java.awt.Dialog;
 
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -34,19 +31,27 @@ import java.awt.event.ActionListener;
 import java.rmi.RemoteException;
 import java.sql.Timestamp;
 import java.awt.event.ActionEvent;
+import java.awt.Toolkit;
 
 public class MainFrame extends JFrame {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	private JPanel contentPane;
 	private JTextField textField;
 	private JTextField textField_1;
 	private JTextField textField_2;
 	private JTextField textField_3;
 	private JTextField textField_4;
+	private JCheckBox chckbxAutomatisch;
+	private static JButton btnSenden = new JButton("Senden");
 	
 	private Client client;
 	private Server server;
 	private StringProperty chatLog = new SimpleStringProperty();
+	private Thread PMThread;
 
 	/**
 	 * Launch the application.
@@ -57,6 +62,7 @@ public class MainFrame extends JFrame {
 				try {
 					MainFrame frame = new MainFrame();
 					frame.setVisible(true);
+					frame.getRootPane().setDefaultButton(btnSenden);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -68,6 +74,8 @@ public class MainFrame extends JFrame {
 	 * Create the frame.
 	 */
 	public MainFrame() {
+		setIconImage(Toolkit.getDefaultToolkit().getImage(MainFrame.class.getResource("/javax/swing/plaf/metal/icons/ocean/computer.gif")));
+		setTitle("RMI-Chatprogramm");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(100, 100, 1000, 650);
 		contentPane = new JPanel();
@@ -148,6 +156,7 @@ public class MainFrame extends JFrame {
 		gbc_panel_3.gridy = 2;
 		panel.add(panel_3, gbc_panel_3);
 
+		btnSenden.setEnabled(false);
 		JButton btnTrennen = new JButton("Trennen");
 		JButton btnVerbinden = new JButton("Verbinden");
 		btnVerbinden.addActionListener(new ActionListener() {
@@ -176,21 +185,26 @@ public class MainFrame extends JFrame {
 					JOptionPane.showMessageDialog(null, "Konnte nicht mit angegebener Adresse verbinden.");
 					return;
 				}
+				// succesful connection
 				chatLog.set("");
-				
+				PMThread = new PullMessageThread();
+				PMThread.start();
 				//Button logic
 				btnVerbinden.setEnabled(false);
 				btnTrennen.setEnabled(true);
+				btnSenden.setEnabled(true);
 			}
 		});
 		panel_3.add(btnVerbinden);
-		
+
 		btnTrennen.setEnabled(false);
 		btnTrennen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				client = null;
+				PMThread = null;
 				
 				//Button logic
+				btnSenden.setEnabled(false);
 				btnTrennen.setEnabled(false);
 				btnVerbinden.setEnabled(true);
 			}
@@ -226,11 +240,11 @@ public class MainFrame extends JFrame {
 		textField_2.setColumns(30);
 		panel_4.add(textField_2);
 		
-		JButton btnSenden = new JButton("Senden");
 		btnSenden.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				try {
 					client.sendMessage(textField_2.getText());
+					textField_2.setText("");
 				} catch (RemoteException | InterruptedException e1) {
 					e1.printStackTrace();
 				}
@@ -267,6 +281,9 @@ public class MainFrame extends JFrame {
 		panel_5.add(btnNachrichtenAbrufen);
 		
 		panel_5.add(chckbxAlleNeuenNachrichten);
+		
+		chckbxAutomatisch = new JCheckBox("Automatisch");
+		panel_5.add(chckbxAutomatisch);
 		
 		JPanel panel_1 = new JPanel();
 		panel_1.setBorder(new LineBorder(new Color(0, 0, 0)));
@@ -390,7 +407,35 @@ public class MainFrame extends JFrame {
 			}
 		});
 		panel_7.add(btnStoppen);
-		
+	}
+	
 
+	
+	class PullMessageThread extends Thread {
+		@Override
+        public void run() {
+            while (true) {
+                pull();
+                try {
+                    Thread.sleep(5*1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+		private void pull() {
+			if (client != null && chckbxAutomatisch.isSelected()) {
+				try {
+					String message = client.getMessage();
+					while (!message.equals("")) {
+						chatLog.set(chatLog.getValueSafe() + message);
+						message = client.getMessage();
+					}
+				} catch (RemoteException | InterruptedException e1) {
+					e1.printStackTrace();
+				}
+			}
+		}
 	}
 }

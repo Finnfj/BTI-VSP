@@ -1,27 +1,27 @@
 package chat;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.rmi.*;
 import java.rmi.server.*;
 import java.rmi.registry.*;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.FileHandler;
-import java.util.logging.Formatter;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
-import java.util.logging.StreamHandler;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
+
 public class Server extends UnicastRemoteObject implements RemoteInterface {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	private static final String INTERFACENAME = "MessageService";
 	private int queueLen;
 	private int keepHistoryTime;
@@ -30,8 +30,6 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 	private Map<String,ClientMemory> history;
 	
 	private Logger logger = Logger.getLogger("ServerLog");
-	private FileHandler fh;
-	private Registry registry;
 
 	// StringProperty for reading Server log externally
 	private StringProperty logMsg = new SimpleStringProperty();
@@ -49,7 +47,7 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 
 		// Log starten
 	    try {   
-	    	fh = new FileHandler("./Server.log");  
+	    	FileHandler fh = new FileHandler("./Server.log");  
 	        logger.addHandler(fh);
 	        SimpleFormatter formatter = new SimpleFormatter();
 	        fh.setFormatter(formatter);   
@@ -63,6 +61,7 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 		Thread cleaner = new CleanerThread();
 		cleaner.start();
 		try {
+			Registry registry;
 			try {
 				registry = LocateRegistry.createRegistry(1099);
 			} catch (Exception e) {}
@@ -107,7 +106,7 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 						if (lastMessageIndex + 1 < messageQueue.size()) {
 							message = messageQueue.get(lastMessageIndex + 1);
 						} else {
-							log(clientID + " reading message but nothing to deliver");
+							//log(clientID + " reading message but nothing to deliver");
 							return "";
 						}
 					}
@@ -127,10 +126,10 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 
 		client.setLastSent(message);
 		if (message == null) {
-			log(clientID + " reading message but nothing to deliver");
+			//log(clientID + " reading message but nothing to deliver");
 			return "";
 		} else { 
-			log(clientID + " reading message, delivering message: " + message.toString());
+			log(clientID + " receiving message: " + message.toString());
 			return message.toString() + "\n";
 		}
 	}

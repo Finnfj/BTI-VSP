@@ -1,0 +1,7 @@
+ERROR - 14:40:10: java.net.MalformedURLException: unknown protocol: pathmap
+ERROR - 14:40:18: java.net.MalformedURLException: unknown protocol: pathmap
+WARNING - 14:40:27: First conversion pass
+ERROR - 14:40:27: java.net.MalformedURLException: unknown protocol: pathmap
+WARNING - 14:40:39: First conversion pass
+ERROR - 14:40:39: org.xml.sax.SAXParseExceptionpublicId: /VSP/src/chat/Client.java; systemId: file:///VSP/src/chat/Client.java; lineNumber: 1; columnNumber: 1; Content ist nicht zulässig in Prolog.
+ERROR - 14:40:39: org.xml.sax.SAXParseExceptionpublicId: /VSP/src/chat/Client.java; systemId: file:///VSP/src/chat/Client.java; lineNumber: 1; columnNumber: 1; Content ist nicht zulässig in Prolog.

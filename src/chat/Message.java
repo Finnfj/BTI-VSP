@@ -14,22 +14,6 @@ public class Message {
 		this.message = message;
 		this.recTime = recTime;
 	}
-
-	public String getClientID() {
-		return clientID;
-	}
-
-	public int getMessageID() {
-		return messageID;
-	}
-
-	public String getMessage() {
-		return message;
-	}
-
-	public long getRecTime() {
-		return recTime;
-	}
 	
 	public String toString() {
 		return this.clientID + "-" + this.messageID + ":" + this.message + ", " + new Timestamp(this.recTime);

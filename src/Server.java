@@ -1,4 +1,4 @@
-package chat;
+
 
 import java.io.IOException;
 import java.rmi.*;
@@ -17,7 +17,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
 
-public class Server extends UnicastRemoteObject implements RemoteInterface {
+public class Server extends UnicastRemoteObject implements MessageService {
 	/**
 	 * 
 	 */
@@ -28,6 +28,9 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 	private int messageCounter;
 	private List<Message> messageQueue;
 	private Map<String,ClientMemory> history;
+	private Registry registry;
+	private final Object messageQueueLock = new Object();
+	private final Object historyLock = new Object();
 	
 	private Logger logger = Logger.getLogger("ServerLog");
 
@@ -60,8 +63,10 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 		// Set up cleaner Thread that deletes old Clients
 		Thread cleaner = new CleanerThread();
 		cleaner.start();
+		
+		System.setProperty("java.security.policy", "file:server.policy");
+		System.setSecurityManager(new SecurityManager());
 		try {
-			Registry registry;
 			try {
 				registry = LocateRegistry.createRegistry(1099);
 			} catch (Exception e) {}
@@ -73,72 +78,93 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
 			e.printStackTrace();
 		}
 	}
+	
+	public void stop() {
+		try {
+			registry.unbind(INTERFACENAME);
+		} catch (RemoteException | NotBoundException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		try {
+			UnicastRemoteObject.unexportObject(this, true);
+		} catch (NoSuchObjectException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 
 	@Override
-	public void newMessage(String clientID, String message) throws RemoteException {
-		if (messageQueue.size() >= queueLen) {
-			messageQueue.remove(0);
-			log("receiving message while buffer is full, delete oldest message...");
+	public synchronized void newMessage(String clientID, String message) throws RemoteException {
+		synchronized (messageQueueLock) {
+			if (messageQueue.size() >= queueLen) {
+				messageQueue.remove(0);
+				log("receiving message while buffer is full, delete oldest message...");
+			}
+			Message m = new Message(clientID, messageCounter++, message, System.currentTimeMillis());
+			messageQueue.add(m);
+			log("received following message: " + m.toString());
 		}
-		Message m = new Message(clientID, messageCounter++, message, System.currentTimeMillis());
-		messageQueue.add(m);
-		log("received following message: " + m.toString());
 	}
 
 	@Override
 	public String nextMessage(String clientID) throws RemoteException {
-		Message message = null;
-		ClientMemory client;
-		
-		if (history.containsKey(clientID)) {
-			client = history.get(clientID);
+		synchronized (messageQueueLock) {
+			Message message = null;
+			ClientMemory client;
 			
-			if (client != null) {
-				client.setDeathTime(System.currentTimeMillis() + keepHistoryTime*1000);
-				Message lastMessage = client.getLastSent();
-				
-				if (lastMessage != null) {
-					int lastMessageIndex = messageQueue.indexOf(lastMessage);
-					if (lastMessageIndex == -1) {
-						message = sendOldest();
-					} else {
-						// die nächste Nachricht senden
-						if (lastMessageIndex + 1 < messageQueue.size()) {
-							message = messageQueue.get(lastMessageIndex + 1);
+			synchronized (historyLock) {
+				if (history.containsKey(clientID)) {
+					client = history.get(clientID);
+					
+					if (client != null) {
+						client.setDeathTime(System.currentTimeMillis() + keepHistoryTime*1000);
+						Message lastMessage = client.getLastSent();
+						
+						if (lastMessage != null) {
+							int lastMessageIndex = messageQueue.indexOf(lastMessage);
+							if (lastMessageIndex == -1) {
+								message = sendOldest();
+							} else {
+								// die nï¿½chste Nachricht senden
+								if (lastMessageIndex + 1 < messageQueue.size()) {
+									message = messageQueue.get(lastMessageIndex + 1);
+								} else {
+									//log(clientID + " reading message but nothing to deliver");
+									return null;
+								}
+							}
 						} else {
-							//log(clientID + " reading message but nothing to deliver");
-							return "";
+							message = sendOldest();
 						}
+					} else {
+						System.out.println("Client key in map aber keine Entry");
 					}
 				} else {
 					message = sendOldest();
+					
+					// Neue Memory anlegen
+					client = new ClientMemory(System.currentTimeMillis() + keepHistoryTime*1000, message);
+					history.put(clientID, client);
 				}
-			} else {
-				System.out.println("Client key in map aber keine Entry");
 			}
-		} else {
-			message = sendOldest();
-			
-			// Neue Memory anlegen
-			client = new ClientMemory(System.currentTimeMillis() + keepHistoryTime*1000, message);
-			history.put(clientID, client);
-		}
-
-		client.setLastSent(message);
-		if (message == null) {
-			//log(clientID + " reading message but nothing to deliver");
-			return "";
-		} else { 
-			log(clientID + " receiving message: " + message.toString());
-			return message.toString() + "\n";
+	
+			client.setLastSent(message);
+			if (message == null) {
+				//log(clientID + " reading message but nothing to deliver");
+				return null;
+			} else { 
+				log(clientID + " receiving message: " + message.toString());
+				return message.toString();
+			}
 		}
 	}
 	
 	private Message sendOldest() {
 		Message message = null;
-		// älteste bekannte senden
+		// ï¿½lteste bekannte senden
 		if (!messageQueue.isEmpty()) {
-			// sende älteste Nachricht
+			// sende ï¿½lteste Nachricht
 			message = messageQueue.get(0);
 		}
 		return message;
@@ -163,12 +189,14 @@ public class Server extends UnicastRemoteObject implements RemoteInterface {
         }
 
 		private void cleanHist() {
-			long currTime = System.currentTimeMillis();
-			Collection<ClientMemory> hist = history.values();
-			for (ClientMemory c : hist) {
-				if (c.getDeathTime() <= currTime) {
-					log("TTL of a client exceeded, removing from cache...");
-					hist.remove(c);
+			synchronized (historyLock) {
+				long currTime = System.currentTimeMillis();
+				Collection<ClientMemory> hist = history.values();
+				for (ClientMemory c : hist) {
+					if (c.getDeathTime() <= currTime) {
+						log("TTL of a client exceeded, removing from cache...");
+						hist.remove(c);
+					}
 				}
 			}
 		}

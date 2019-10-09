@@ -1,4 +1,4 @@
-package chat;
+
 
 import java.awt.EventQueue;
 
@@ -31,7 +31,6 @@ import java.awt.event.ActionListener;
 import java.rmi.RemoteException;
 import java.sql.Timestamp;
 import java.awt.event.ActionEvent;
-import java.awt.Toolkit;
 
 public class MainFrame extends JFrame {
 
@@ -74,7 +73,7 @@ public class MainFrame extends JFrame {
 	 * Create the frame.
 	 */
 	public MainFrame() {
-		setIconImage(Toolkit.getDefaultToolkit().getImage(MainFrame.class.getResource("/javax/swing/plaf/metal/icons/ocean/computer.gif")));
+		//setIconImage(Toolkit.getDefaultToolkit().getImage(MainFrame.class.getResource("/javax/swing/plaf/metal/icons/ocean/computer.gif")));
 		setTitle("RMI-Chatprogramm");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(100, 100, 1000, 650);
@@ -179,12 +178,9 @@ public class MainFrame extends JFrame {
 					return;
 				}
 				
-				try {
-					client = new Client(address, timeout);
-				} catch (RemoteException e) {
-					JOptionPane.showMessageDialog(null, "Konnte nicht mit angegebener Adresse verbinden.");
-					return;
-				}
+				client = new Client(address, timeout);
+				// keine Erkennung auf fehlgeschlagene Verbindung
+				
 				// succesful connection
 				chatLog.set("");
 				PMThread = new PullMessageThread();
@@ -200,6 +196,7 @@ public class MainFrame extends JFrame {
 		btnTrennen.setEnabled(false);
 		btnTrennen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				client.stop();
 				client = null;
 				PMThread = null;
 				
@@ -266,14 +263,16 @@ public class MainFrame extends JFrame {
 				try {
 					String message = client.getMessage();
 					if (chckbxAlleNeuenNachrichten.isSelected()) {
-						while (!message.equals("")) {
-							chatLog.set(chatLog.getValueSafe() + message);
+						while (message != null) {
+							chatLog.set(chatLog.getValueSafe() + message + "\n");
 							message = client.getMessage();
 						}
 					} else {
-						chatLog.set(chatLog.getValueSafe() + message);
+						if (message != null) {
+							chatLog.set(chatLog.getValueSafe() + message + "\n");
+						}
 					}
-				} catch (RemoteException | InterruptedException e1) {
+				} catch (InterruptedException e1) {
 					e1.printStackTrace();
 				}
 			}
@@ -399,6 +398,7 @@ public class MainFrame extends JFrame {
 		btnStoppen.setEnabled(false);
 		btnStoppen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				server.stop();
 				server = null;
 				
 				// Button logic
@@ -428,11 +428,11 @@ public class MainFrame extends JFrame {
 			if (client != null && chckbxAutomatisch.isSelected()) {
 				try {
 					String message = client.getMessage();
-					while (!message.equals("")) {
-						chatLog.set(chatLog.getValueSafe() + message);
+					while (message != null) {
+						chatLog.set(chatLog.getValueSafe() + message + "\n");
 						message = client.getMessage();
 					}
-				} catch (RemoteException | InterruptedException e1) {
+				} catch (InterruptedException e1) {
 					e1.printStackTrace();
 				}
 			}

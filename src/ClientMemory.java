@@ -1,4 +1,4 @@
-package chat;
+
 
 public class ClientMemory {
 	private long deathTime;
